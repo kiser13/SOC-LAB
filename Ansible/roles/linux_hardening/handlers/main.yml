@@ -1,0 +1,29 @@
+---
+- name: restart-auditd
+  service:
+    name: auditd
+    state: restarted
+  ignore_errors: yes
+  
+- name: update-grub
+  command: update-grub
+
+- name: restart-ssh
+  service:
+    name: ssh
+    state: restarted
+
+- name: restart-timesyncd
+  service:
+    name: systemd-timesyncd
+    state: restarted
+  when: "'systemd-timesyncd.service' in ansible_facts.services"
+
+- name: Reload Sysctl
+  ansible.builtin.command: sysctl --system
+  become: yes
+
+- name: Restart SSH
+  ansible.builtin.service:
+    name: ssh
+    state: restarted
