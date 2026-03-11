@@ -1,0 +1,3 @@
+#Here will be the encrypted default credentials for the new Linux deployment.
+#to Edit: ansible-vault edit inventories/group_vars/new_linux_servers.yml
+#To View (without editing): ansible-vault view inventories/group_vars/new_linux_servers.yml
