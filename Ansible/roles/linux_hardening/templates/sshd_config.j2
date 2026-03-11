@@ -1,0 +1,51 @@
+# Hardened SSH configuration
+# ==============================================================================
+# HARDENED SSH SERVER CONFIGURATION (sshd_config.j2)
+# Managed by Ansible - Manual changes will be overwritten.
+# ==============================================================================
+
+# 1. BASIC CONNECTION SETTINGS
+Port 22
+Protocol 2
+AddressFamily inet
+
+# 2. AUTHENTICATION & ACCESS CONTROL
+# Pro-Sec Tip: Never allow root to login directly via SSH. 
+# Force attackers to find a low-privilege user first.
+PermitRootLogin no
+MaxAuthTries 3
+MaxSessions 2
+
+# Public Key Authentication is the gold standard.
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Set this to 'no' if you want to force SSH Keys only (highly recommended).
+PasswordAuthentication {{ ssh_password_auth | default('yes') }}
+PermitEmptyPasswords no
+
+# 3. SHELL & ENVIRONMENT
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+PrintMotd no
+TCPKeepAlive yes
+
+# 4. LOGGING & AUDIT
+# 'VERBOSE' ensures that SSH key fingerprints are logged, which is 
+# vital for forensics in your Wazuh/IRIS lab.
+SyslogFacility AUTHPRIV
+LogLevel VERBOSE
+
+# 5. MODERN CRYPTOGRAPHY (Kex, Ciphers, MACs)
+# This limits SSH to only use strong, modern encryption.
+KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+
+# 6. TIMEOUTS (Prevents idle sessions from staying open)
+ClientAliveInterval 300
+ClientAliveCountMax 0
+
+# Banner - Displays a legal warning to anyone connecting
+Banner /etc/issue.net
