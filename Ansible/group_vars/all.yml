@@ -1,0 +1,2 @@
+---
+wazuh_manager_ip: "MANAGER_IP"  # Replace with your actual Wazuh Manager IP
