@@ -1,1 +1,38 @@
+---
+- name: Install required dependencies
+  package:
+    name: curl
+    state: present
 
+- name: Download Wazuh agent package (Ubuntu/Debian)
+  get_url:
+    url: "https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14.3-1_amd64.deb"
+    dest: /tmp/wazuh-agent.deb
+    mode: '0644'
+  when: ansible_os_family == "Debian"
+
+- name: Install Wazuh agent (Debian/Ubuntu) with hostname as agent name
+  shell: |
+    WAZUH_MANAGER={{ wazuh_manager }} \
+    WAZUH_AGENT_GROUP={{ wazuh_agent_group }} \
+    WAZUH_AGENT_NAME={{ ansible_hostname }} \
+    dpkg -i /tmp/wazuh-agent.deb
+  args:
+    executable: /bin/bash
+    creates: /var/ossec/bin/wazuh-control
+  when: ansible_os_family == "Debian"
+
+- name: Enable and start Wazuh agent service
+  systemd:
+    name: wazuh-agent
+    enabled: yes
+    state: started
+
+- name: Apply Hardened Wazuh Configuration
+  template:
+    src: ossec.conf.j2
+    dest: /var/ossec/etc/ossec.conf
+    owner: root
+    group: wazuh
+    mode: '0640'
+  notify: Restart Wazuh Agent
