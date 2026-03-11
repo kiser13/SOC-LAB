@@ -1,1 +1,44 @@
+---
+- name: Bootstrap Dedicated Ansible Service Account
+  hosts: new_linux_servers
+  become: yes
+  vars:
+    # This is the new professional service account name
+    service_user: "ansible_svc"
 
+  tasks:
+    - name: 1. Create the dedicated Ansible Service Account
+      ansible.builtin.user:
+        name: "{{ service_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+        state: present
+        comment: "Ansible Automation Service Account"
+
+    - name: 2. Configure Passwordless Sudo for the Service Account
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/ansible_svc
+        state: present
+        create: yes
+        line: "{{ service_user }} ALL=(ALL) NOPASSWD: ALL"
+        validate: '/usr/sbin/visudo -cf %s'
+        mode: '0440'
+
+    - name: 3. Deploy SSH Public Key for the Service Account
+      ansible.builtin.authorized_key:
+        user: "{{ service_user }}"
+        state: present
+        # This grabs the key from your Ansible control node
+        key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+    - name: 4. Secure the Service User (Disable password login)
+      ansible.builtin.user:
+        name: "{{ service_user }}"
+        password: "!" # This locks the password, allowing ONLY SSH key access
+
+  handlers:
+    - name: restart ssh
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
