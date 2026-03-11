@@ -1,1 +1,14 @@
+---
+- name: Secure Linux Server Onboarding (Wazuh + CIS Hardening)
+  hosts: linux_fleet
+  become: yes                # Tells Ansible to use 'sudo' for tasks
+  remote_user: ansible_svc   # Who logs in via SSH
+  gather_facts: yes
 
+  vars:
+    wazuh_manager: "IP_WAZUH_MANAGER"     #Change with your wazuh Manager IP
+    wazuh_agent_group: "linux"
+
+  roles:
+    - linux_hardening       # 1st: Lock the doors (SSH, firewall, sysctl)
+    - wazuh_agent           # 2nd: Start the monitoring
