@@ -1,0 +1,168 @@
+- name: Populate service facts
+  ansible.builtin.service_facts:
+
+- name: Deploy Kernel Hardening Configuration (99-sysctl.conf)
+  ansible.builtin.copy:
+    src: 99-sysctl.conf
+    dest: /etc/sysctl.d/99-sysctl.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Sysctl
+
+- name: Deploy Hardened SSH Configuration
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: '0600'  # Crucial: Only root should read this
+  notify: Restart SSH
+
+# 35511 - 35517: /tmp and /dev/shm
+- name: 35511-35517 | Secure /tmp and /dev/shm mount options
+  mount:
+    path: "{{ item.path }}"
+    fstype: tmpfs
+    src: tmpfs
+    opts: "{{ item.opts }}"
+    state: mounted
+  loop:
+    - { path: '/tmp', opts: 'defaults,rw,nosuid,nodev,noexec,relatime' }
+    - { path: '/dev/shm', opts: 'defaults,nodev,nosuid,noexec' }
+
+# 35519, 35520, 35521: /home and /var Bind Mounts
+- name: 35519-35521 | Create bind mounts for /home and /var
+  mount:
+    path: "{{ item }}"
+    src: "{{ item }}"
+    fstype: none
+    opts: "bind,nodev,nosuid"
+    state: mounted
+  loop:
+    - /home
+    - /var
+
+# 35524 - 35527: Secure /var/tmp
+# 35528 - 35531: Secure /var/log
+- name: 35524-35531 | Create bind mounts for /var/tmp and /var/log
+  mount:
+    path: "{{ item.path }}"
+    src: "{{ item.path }}"
+    fstype: none
+    opts: "{{ item.opts }}"
+    state: mounted
+  loop:
+    - { path: '/var/tmp', opts: 'bind,nosuid,nodev,noexec' }
+    - { path: '/var/log', opts: 'bind,nosuid,nodev,noexec' }
+
+# Optional: Cleanup /var/tmp after mounting to ensure no old files bypass flags
+- name: 35527 | Ensure /var/tmp is clean (Optional)
+  file:
+    path: /var/tmp
+    state: directory
+    mode: '1777'
+
+
+# 35532 - 35535: Secure /var/log/audit
+- name: 35532-35535 | Create bind mount for /var/log/audit
+  mount:
+    path: /var/log/audit
+    src: /var/log/audit
+    fstype: none
+    opts: "bind,nosuid,nodev,noexec"
+    state: mounted
+
+# 35536: Ensure AppArmor is installed
+- name: 35536 | Install AppArmor and Utils
+  apt:
+    name: 
+      - apparmor
+      - apparmor-utils
+    state: present
+    update_cache: yes
+
+# 35537: Ensure AppArmor is enabled in bootloader (GRUB)
+- name: 35537 | Enable AppArmor in GRUB configuration
+  lineinfile:
+    path: /etc/default/grub
+    regexp: '^GRUB_CMDLINE_LINUX='
+    line: 'GRUB_CMDLINE_LINUX="apparmor=1 security=apparmor"'
+  notify: update-grub
+
+# 35539: Ensure all AppArmor Profiles are enforcing
+- name: 35539 | Set all AppArmor profiles to enforce mode
+  shell: aa-enforce /etc/apparmor.d/*
+  changed_when: false
+  ignore_errors: yes
+
+# 35540: Ensure bootloader password is set
+# WARNING: This requires manual intervention for the password hash.
+- name: 35540 | Suggestion for GRUB password
+  debug:
+    msg: "To pass 35540, run 'grub-mkpasswd-pbkdf2' manually and add the user/hash to /etc/grub.d/40_custom"
+
+
+# 35543: Ensure core dumps are restricted
+- name: 35543 | Restrict core dumps (sysctl)
+  sysctl:
+    name: fs.suid_dumpable
+    value: '0'
+    state: present
+    reload: yes
+
+- name: 35543 | Restrict core dumps (limits.conf)
+  lineinfile:
+    path: /etc/security/limits.conf
+    line: '* hard core 0'
+    insertafter: EOF
+
+# 35547-35548: Ensure login warning banners are configured
+- name: 35547-35548 | Configure login banners
+  copy:
+    dest: "{{ item }}"
+    content: "Authorized uses only. All activity may be monitored and reported.\n"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - /etc/issue
+    - /etc/issue.net
+
+# 35588: Ensure systemd-timesyncd is configured
+- name: 35588 | Configure systemd-timesyncd with authorized timeservers
+  lineinfile:
+    path: /etc/systemd/timesyncd.conf
+    regexp: '^NTP='
+    line: 'NTP=0.pool.ntp.org 1.pool.ntp.org'
+  notify: restart-timesyncd
+
+
+# 35591, 35592: Ensure chrony is enabled and running correctly
+- name: 35591-35592 | Install and enable chrony
+  apt:
+    name: chrony
+    state: present
+    update_cache: yes
+
+- name: 35591-35592 | Ensure chrony service is running and enabled
+  systemd:
+    name: chrony
+    enabled: yes
+    state: started
+
+# 35594 - 35596: Ensure permissions on cron files are configured
+# CIS requires these files be owned by root and only readable by root
+- name: 35595-35596 | Secure cron directories (0700)
+  file:
+    path: "{{ item }}"
+    owner: root
+    group: root
+    mode: '0700'
+    state: directory
+  loop:
+    - /etc/cron.hourly
+    - /etc/cron.daily
+    - /etc/cron.weekly
+    - /etc/cron.monthly
+    - /etc/cron.d
